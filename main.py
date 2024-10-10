@@ -6,8 +6,9 @@ from machine import Pin, SPI, RTC, ADC
 import st7789py as st7789
 import dseg7b32 as your_font_small  # Smaller font module
 import dseg64b as your_font_large   # Larger font module
-import mini16 as your_font_micro   # Mini font module (8x8)
+import mini8 as your_font_micro   # Mini font module (8x8)
 import mini16 as your_font_mini   # Mini font module (16x16)
+
 # ============================
 # Configuration Parameters
 # ============================
