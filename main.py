@@ -10,19 +10,13 @@ import dseg64b as your_font_large   # Larger font module
 # ============================
 # Configuration Parameters
 # ============================
+
 # Time synchronization interval in hours
 TIME_SYNC_INTERVAL_HOURS = 6  # Change '6' to your desired interval
 
 # DST Settings for Greece
 # DST starts at 3:00 AM on the last Sunday in March
 # DST ends at 4:00 AM on the last Sunday in October
-
-# Pulse Indicator Dot Settings
-DOT_X = 10          # X-coordinate of the dot
-DOT_Y = 10         # Y-coordinate of the dot
-DOT_SIZE = 10       # Size of the dot (square)
-DOT_COLOR_ON = st7789.GREEN
-DOT_COLOR_OFF = st7789.BLACK
 
 # ============================
 # Helper Functions
@@ -58,7 +52,6 @@ def load_env_vars(filename='.env'):
     except OSError as e:
         print(f"Error loading {filename}: {e}")
     return env_vars
-
 
 def connect_wifi(ssid, password, timeout=10):
     """Connect to a Wi-Fi network with a timeout."""
@@ -220,48 +213,35 @@ def display_text(display, text, x, y, font, color):
         except KeyError:
             x += font.max_width()
 
-def display_time_on_screen(display, time_text, font=your_font_large):
+def display_time_digits(display, hour_text, minute_text, x_positions, y, font):
     """
-    Display the current time on the screen.
-    Args:
-        display: ST7789 display object
-        time_text (str): Formatted time string (e.g., "12:34")
-        font: Font module to use
+    Display the hour and minute digits on the screen.
     """
-    # Calculate text width and height
-    text_width = get_text_width(time_text, font)
-    text_height = font.height()
+    # Draw hour
+    display_text(display, hour_text, x_positions['hour'], y, font, st7789.WHITE)
+    # Draw minute
+    display_text(display, minute_text, x_positions['minute'], y, font, st7789.WHITE)
 
-    # Calculate position to center the text
-    x_pos = (display.width - text_width) // 2
-    y_pos = (display.height - text_height) // 2
+def update_colon(display, x_positions, y, font, show_colon):
+    """
+    Draw or clear the colon at the specified position.
+    """
+    colon_width = get_text_width(":", font)
+    colon_height = font.height()
 
-    # Clear the text area
-    display.fill_rect(x_pos, y_pos, text_width, text_height, st7789.BLACK)
-    gc.collect()  # Perform garbage collection
-
-    # Draw the text in the center of the screen
-    display_text(display, time_text, x_pos, y_pos, font, st7789.WHITE)
+    if show_colon:
+        display_text(display, ":", x_positions['colon'], y, font, st7789.WHITE)
+    else:
+        # Clear colon area
+        display.fill_rect(x_positions['colon'], y, colon_width, colon_height, st7789.BLACK)
     gc.collect()  # Perform garbage collection after drawing
-
-def draw_dot(display, x, y, size, color):
-    """
-    Draw a filled square dot on the display.
-    Args:
-        display: ST7789 display object
-        x (int): X-coordinate of the dot's top-left corner
-        y (int): Y-coordinate of the dot's top-left corner
-        size (int): Size of the dot (width and height)
-        color: Color of the dot
-    """
-    display.fill_rect(x, y, size, size, color)
 
 # ============================
 # Temperature Reading Functions
 # ============================
 
 # Initialize ADC on GPIO26 (ADC pin 4) for internal temperature sensor
-sensor_temp = machine.ADC(4)
+sensor_temp = ADC(4)
 
 def read_internal_temperature():
     """
@@ -271,90 +251,19 @@ def read_internal_temperature():
     temperature_c = 27 - (reading - 0.706)/0.001721
     return temperature_c
 
-def display_temperature(display, temperature, font=your_font_small):
-    """
-    Display the temperature on the screen.
-    Args:
-        display: ST7789 display object
-        temperature (float): Temperature in Celsius
-        font: Font module to use
-    """
-    # Format the temperature string with one decimal place
-    temp_text = 'Temp: {:0.1f}°C'.format(temperature)
-    
-    # Calculate text width and height
-    text_width = get_text_width(temp_text, font)
-    text_height = font.height()
-    
-    # Position the temperature below the time
-    x_pos = (display.width - text_width) // 2
-    # Assume time is centered; place temperature 10 pixels below
-    y_pos = (display.height - text_height) // 2 + your_font_large.height() + 10
-    
-    # Clear the temperature area
-    display.fill_rect(x_pos, y_pos, text_width, text_height, st7789.BLACK)
-    gc.collect()  # Perform garbage collection
-    
-    # Draw the temperature text
-    display_text(display, temp_text, x_pos, y_pos, font, st7789.WHITE)
-    gc.collect()  # Perform garbage collection after drawing
-
-def display_time_and_temperature(display, time_text, temperature, 
-                                 time_font=your_font_large, temp_font=your_font_small):
-    """
-    Display the current time and temperature on the screen.
-    Args:
-        display: ST7789 display object
-        time_text (str): Formatted time string (e.g., "12:34")
-        temperature (float): Temperature in Celsius
-        time_font: Font module for time
-        temp_font: Font module for temperature
-    """
-    # Display Time
-    # Calculate text width and height
-    time_width = get_text_width(time_text, time_font)
-    time_height = time_font.height()
-
-    # Calculate position to center the time
-    time_x = (display.width - time_width) // 2
-    time_y = (display.height - time_height) // 2 - time_height // 2  # Slightly above center
-
-    # Clear the time area
-    display.fill_rect(time_x, time_y, time_width, time_height, st7789.BLACK)
-    gc.collect()  # Perform garbage collection
-
-    # Draw the time text
-    display_text(display, time_text, time_x, time_y, time_font, st7789.WHITE)
-    
-    # Display Temperature
-    temp_text = '{:0.1f}C'.format(temperature)
-    temp_width = get_text_width(temp_text, temp_font)
-    temp_height = temp_font.height()
-
-    # Position the temperature below the time
-    temp_x = (display.width - temp_width) // 2
-    temp_y = time_y + time_height + 10  # 10 pixels below time
-
-    # Clear the temperature area
-    display.fill_rect(temp_x, temp_y, temp_width, temp_height, st7789.BLACK)
-    gc.collect()  # Perform garbage collection
-
-    # Draw the temperature text
-    display_text(display, temp_text, temp_x, temp_y, temp_font, st7789.WHITE)
-    gc.collect()  # Perform garbage collection after drawing
-
 # ============================
 # Main Function
 # ============================
 
 def main():
+    """Main function to run the clock with temperature display."""
     gc.collect()  # Initial garbage collection
     env_vars = load_env_vars()
-    
+
     # Retrieve Wi-Fi credentials from environment variables
-    WIFI_SSID = env_vars.get('SSID')
-    WIFI_PASSWORD = env_vars.get('PASSWORD')
-    
+    WIFI_SSID = env_vars.get('WIFI_SSID')
+    WIFI_PASSWORD = env_vars.get('WIFI_PASSWORD')
+
     if not WIFI_SSID or not WIFI_PASSWORD:
         print("Wi-Fi credentials not found in .env file.")
         return  # Exit the main function if credentials are missing
@@ -371,8 +280,32 @@ def main():
     last_sync_time = time.time()
     sync_interval_seconds = TIME_SYNC_INTERVAL_HOURS * 3600
 
+    last_hour = -1
     last_minute = -1
-    dot_state = False
+    dot_state = False  # For colon blinking
+
+    # Set fonts
+    time_font = your_font_large
+    temp_font = your_font_small
+
+    # Calculate positions for time display
+    hour_text = '00'
+    minute_text = '00'
+    hour_width = get_text_width(hour_text, time_font)
+    colon_width = get_text_width(":", time_font)
+    minute_width = get_text_width(minute_text, time_font)
+    total_time_width = hour_width + colon_width + minute_width
+
+    # Calculate positions
+    time_x = (display.width - total_time_width) // 2
+    time_y = (display.height - time_font.height()) // 2 - time_font.height() // 2  # Slightly above center
+
+    # Positions of hour, colon, minute
+    positions = {
+        'hour': time_x,
+        'colon': time_x + hour_width,
+        'minute': time_x + hour_width + colon_width
+    }
 
     try:
         while True:
@@ -416,36 +349,51 @@ def main():
             local_minute = adjusted_time[4]
             local_second = adjusted_time[5]
 
-            # Check if the minute has changed
-            if local_minute != last_minute:
+            # Check if hour or minute has changed
+            if local_hour != last_hour or local_minute != last_minute:
+                last_hour = local_hour
                 last_minute = local_minute
-                # Format the time string as HH:MM
-                time_text = '{:02}:{:02}'.format(local_hour, local_minute)
-                
-                # Read temperature
-                temperature = read_internal_temperature()
-                
-                # Display time and temperature
-                display_time_and_temperature(display, time_text, temperature)
-                # If using separate functions, uncomment the lines below:
-                # display_time_on_screen(display, time_text, font=your_font_large)
-                # display_temperature(display, temperature, font=your_font_small)
 
-            # Toggle the dot state every second
+                # Format the hour and minute text
+                hour_text = '{:02}'.format(local_hour)
+                minute_text = '{:02}'.format(local_minute)
+
+                # Clear the hour and minute areas
+                display.fill_rect(positions['hour'], time_y, hour_width, time_font.height(), st7789.BLACK)
+                display.fill_rect(positions['minute'], time_y, minute_width, time_font.height(), st7789.BLACK)
+
+                # Draw the hour and minute digits
+                display_time_digits(display, hour_text, minute_text, positions, time_y, time_font)
+
+                # Read and display temperature
+                temperature = read_internal_temperature()
+                temp_text = '{:0.1f}C'.format(temperature)
+                temp_width = get_text_width(temp_text, temp_font)
+                temp_x = (display.width - temp_width) // 2
+                temp_y = time_y + time_font.height() + 10  # 10 pixels below time
+
+                # Clear and draw temperature
+                display.fill_rect(temp_x, temp_y, temp_width, temp_font.height(), st7789.BLACK)
+                display_text(display, temp_text, temp_x, temp_y, temp_font, st7789.WHITE)
+                gc.collect()
+
+            # Toggle the colon every second
             dot_state = not dot_state
-            if dot_state:
-                draw_dot(display, DOT_X, DOT_Y, DOT_SIZE, DOT_COLOR_ON)
-            else:
-                draw_dot(display, DOT_X, DOT_Y, DOT_SIZE, DOT_COLOR_OFF)
+            update_colon(display, positions, time_y, time_font, dot_state)
 
             # Resynchronize time if needed
             if time.time() - last_sync_time >= sync_interval_seconds:
                 wlan.active(True)
                 wlan.connect(WIFI_SSID, WIFI_PASSWORD)
+                start_time = time.time()
                 while not wlan.isconnected():
+                    if time.time() - start_time > 10:
+                        print("Failed to reconnect to Wi-Fi.")
+                        break
                     time.sleep(0.5)
-                sync_time()
-                last_sync_time = time.time()
+                if wlan.isconnected():
+                    sync_time()
+                    last_sync_time = time.time()
                 wlan.active(False)
 
             # Sleep for 1 second
@@ -455,12 +403,16 @@ def main():
     except KeyboardInterrupt:
         # Handle script interruption
         print('Script interrupted by user.')
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 # ============================
 # Run the Main Function
 # ============================
 
 if __name__ == '__main__':
-    main()
-
+    try:
+        main()
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
