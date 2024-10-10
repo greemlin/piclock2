@@ -4,10 +4,10 @@ import time
 import gc
 from machine import Pin, SPI, RTC, ADC
 import st7789py as st7789
-import dseg7b32 as your_font_small  # Smaller font module
-import dseg64b as your_font_large   # Larger font module
-import mini8 as your_font_micro   # Mini font module (8x8)
-import mini16 as your_font_mini   # Mini font module (16x16)
+import dseg7b32 as your_font_small  # Smaller font module (32 pixels high)
+import dseg64b as your_font_large   # Larger font module (64 pixels high)
+import mini8 as your_font_micro     # Mini font module (8 pixels high)
+import mini16 as your_font_mini     # Mini font module (16 pixels high)
 
 # ============================
 # Configuration Parameters
@@ -419,12 +419,20 @@ def main():
                 temperature = read_internal_temperature()
                 temp_text = '{:0.1f}C'.format(temperature)
                 temp_width = get_text_width(temp_text, temp_font)
-                temp_x = (display.width - temp_width) // 2
-                temp_y = time_y + time_font.height() + 10  # 10 pixels below time
+                temp_x = (display.width - temp_width) // 2 + 15
+                temp_y = time_y + time_font.height() + 50  # Adjust as needed
+    
+                # Determine the color based on temperature
+                if temperature < 19:
+                    temp_color = st7789.BLUE
+                elif 19 <= temperature <= 25:
+                    temp_color = st7789.GREEN
+                else:  # temperature > 25
+                    temp_color = st7789.RED
     
                 # Clear and draw temperature
                 display.fill_rect(temp_x, temp_y, temp_width, temp_font.height(), st7789.BLACK)
-                display_text(display, temp_text, temp_x, temp_y, temp_font, st7789.WHITE)
+                display_text(display, temp_text, temp_x, temp_y, temp_font, temp_color)
                 gc.collect()
     
             # Toggle the colon every second
