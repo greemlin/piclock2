@@ -368,7 +368,7 @@ def main():
 
     # Calculate positions
     time_x = (display.width - total_time_width) // 2
-    time_y = (display.height - time_font.height()) // 2  # Centered vertically
+    time_y = (display.height - time_font.height()) // 2 - 20  # Centered vertically
 
     # Positions of hour, colon, minute
     positions = {
@@ -439,8 +439,8 @@ def main():
                 temperature = read_internal_temperature()
                 temp_text = '{:0.1f}C'.format(temperature)
                 temp_width = get_text_width(temp_text, temp_font)
-                temp_x = (display.width - temp_width) // 2
-                temp_y = time_y + time_font.height() + 10  # Adjust as needed
+                temp_x = (display.width - temp_width) // 2 + 15
+                temp_y = time_y + time_font.height() + 40  # Adjust as needed
 
                 # Determine the color based on temperature
                 if temperature < 19:
@@ -493,4 +493,5 @@ if __name__ == '__main__':
         main()
     except Exception as e:
         print(f"An error occurred: {e}")
+
 
