@@ -6,7 +6,8 @@ from machine import Pin, SPI, RTC, ADC
 import st7789py as st7789
 import dseg7b32 as your_font_small  # Smaller font module
 import dseg64b as your_font_large   # Larger font module
-
+import mini16 as your_font_micro   # Mini font module (8x8)
+import mini16 as your_font_mini   # Mini font module (16x16)
 # ============================
 # Configuration Parameters
 # ============================
@@ -53,23 +54,58 @@ def load_env_vars(filename='.env'):
         print(f"Error loading {filename}: {e}")
     return env_vars
 
-def connect_wifi(ssid, password, timeout=10):
-    """Connect to a Wi-Fi network with a timeout."""
+def display_message(display, text, color=st7789.WHITE, clear=False, font=your_font_mini):
+    """
+    Display a message on the screen using the specified font.
+    If clear is True, the entire display is cleared.
+    """
+    if clear:
+        display.fill(st7789.BLACK)  # Clear the entire display
+    else:
+        # Clear the entire display first
+        display.fill(st7789.BLACK)
+        # Use the specified font
+        text_width = get_text_width(text, font)
+        text_height = font.height()
+        text_x = (display.width - text_width) // 2
+        text_y = (display.height - text_height) // 2
+        display_text(display, text, text_x, text_y, font, color)
+        gc.collect()  # Perform garbage collection after drawing
+
+def connect_wifi(display, ssid, password, timeout=10):
+    """Connect to a Wi-Fi network with a timeout and display status messages."""
     if not ssid or not password:
         print("SSID or password is missing.")
+        display_message(display, "SSID or password missing.", color=st7789.RED)
+        time.sleep(3)
+        display_message(display, "", clear=True)
         return False
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
-    print('Connecting to Wi-Fi...')
-    wlan.connect(ssid, password)
-    start_time = time.time()
-    while not wlan.isconnected():
-        if time.time() - start_time > timeout:
-            print("Failed to connect to Wi-Fi within the timeout period.")
-            return False
-        time.sleep(0.5)
-    print('Wi-Fi connected:', wlan.ifconfig())
-    return wlan
+    attempt = 1
+    while True:
+        message = f"Connecting... Attempt {attempt}"
+        print(message)
+        display_message(display, message, color=st7789.WHITE)
+        wlan.connect(ssid, password)
+        start_time = time.time()
+        while not wlan.isconnected():
+            if time.time() - start_time > timeout:
+                error_message = f"{ssid} failed!"
+                print(error_message)
+                display_message(display, error_message, color=st7789.RED)
+                wlan.disconnect()
+                time.sleep(30)  # Wait 30 seconds before retrying
+                attempt += 1
+                break  # Break the inner while loop to retry connection
+            time.sleep(0.5)
+        else:
+            success_message = "Wi-Fi connected"
+            print('Wi-Fi connected:', wlan.ifconfig())
+            display_message(display, success_message, color=st7789.GREEN)
+            time.sleep(2)  # Briefly display the success message
+            display_message(display, "", clear=True)  # Clear the message
+            return wlan  # Return the connected WLAN object
 
 def day_of_week(year, month, day):
     """
@@ -135,14 +171,24 @@ def is_dst(year, month, day, hour):
     else:
         return False
 
-def sync_time():
-    """Synchronize the RTC with NTP server."""
-    print('Synchronizing time with NTP...')
+def sync_time(display):
+    """Synchronize the RTC with NTP server and display status messages."""
+    message = "Synchronizing time with NTP..."
+    print(message)
+    display_message(display, message, color=st7789.WHITE)
     try:
         ntptime.settime()  # Sets RTC to UTC time
-        print('Time synchronized.')
+        success_message = "Time synchronized"
+        print(success_message)
+        display_message(display, success_message, color=st7789.GREEN)
+        time.sleep(2)  # Briefly display the success message
+        display_message(display, "", clear=True)  # Clear the message
     except Exception as e:
-        print('Failed to synchronize time:', e)
+        error_message = "Failed to synchronize time"
+        print(error_message, e)
+        display_message(display, error_message, color=st7789.RED)
+        time.sleep(2)
+        display_message(display, "", clear=True)
 
 def get_text_width(text, font):
     """Calculate the total width of the text based on the font."""
@@ -192,6 +238,7 @@ def draw_glyph(display, x0, y0, glyph, width, height, color):
             # Draw the sequence as a horizontal line
             if x_start < x:
                 display.hline(x0 + x_start, y0 + y, x - x_start, color)
+            x += 1  # Move to the next pixel
         byte_index += bytes_per_row
 
 def display_text(display, text, x, y, font, color):
@@ -259,35 +306,37 @@ def main():
     """Main function to run the clock with temperature display."""
     gc.collect()  # Initial garbage collection
     env_vars = load_env_vars()
-
+    
     # Retrieve Wi-Fi credentials from environment variables
     WIFI_SSID = env_vars.get('WIFI_SSID')
     WIFI_PASSWORD = env_vars.get('WIFI_PASSWORD')
-
+    
     if not WIFI_SSID or not WIFI_PASSWORD:
         print("Wi-Fi credentials not found in .env file.")
         return  # Exit the main function if credentials are missing
-
+    
     display = init_display()
-    wlan = connect_wifi(WIFI_SSID, WIFI_PASSWORD)
+    
+    # Connect to Wi-Fi
+    wlan = connect_wifi(display, WIFI_SSID, WIFI_PASSWORD)
     if not wlan:
         print("Unable to connect to Wi-Fi. Exiting.")
         return  # Exit if Wi-Fi connection fails
-
-    sync_time()
+    
+    sync_time(display)
     wlan.active(False)  # Turn off Wi-Fi to save power if not needed
-
+    
     last_sync_time = time.time()
     sync_interval_seconds = TIME_SYNC_INTERVAL_HOURS * 3600
-
+    
     last_hour = -1
     last_minute = -1
     dot_state = False  # For colon blinking
-
+    
     # Set fonts
     time_font = your_font_large
     temp_font = your_font_small
-
+    
     # Calculate positions for time display
     hour_text = '00'
     minute_text = '00'
@@ -295,18 +344,18 @@ def main():
     colon_width = get_text_width(":", time_font)
     minute_width = get_text_width(minute_text, time_font)
     total_time_width = hour_width + colon_width + minute_width
-
+    
     # Calculate positions
     time_x = (display.width - total_time_width) // 2
     time_y = (display.height - time_font.height()) // 2 - time_font.height() // 2  # Slightly above center
-
+    
     # Positions of hour, colon, minute
     positions = {
         'hour': time_x,
         'colon': time_x + hour_width,
         'minute': time_x + hour_width + colon_width
     }
-
+    
     try:
         while True:
             # Get current UTC time from RTC
@@ -317,11 +366,11 @@ def main():
             hour = current_time[3]
             minute = current_time[4]
             second = current_time[5]
-
+    
             # Assume standard timezone offset (UTC+2)
             timezone_offset_hours = 2
             timezone_offset_seconds = timezone_offset_hours * 3600
-
+    
             # Calculate tentative local time (UTC + 2)
             adjusted_time_seconds = time.time() + timezone_offset_seconds
             adjusted_time = time.localtime(adjusted_time_seconds)
@@ -331,14 +380,14 @@ def main():
             local_hour = adjusted_time[3]
             local_minute = adjusted_time[4]
             local_second = adjusted_time[5]
-
+    
             # Check if DST is in effect based on tentative local time
             if is_dst(local_year, local_month, local_day, local_hour):
                 timezone_offset_hours = 3  # EEST (UTC+3)
             else:
                 timezone_offset_hours = 2  # EET (UTC+2)
             timezone_offset_seconds = timezone_offset_hours * 3600
-
+    
             # Recalculate local time with correct timezone offset
             adjusted_time_seconds = time.time() + timezone_offset_seconds
             adjusted_time = time.localtime(adjusted_time_seconds)
@@ -348,58 +397,58 @@ def main():
             local_hour = adjusted_time[3]
             local_minute = adjusted_time[4]
             local_second = adjusted_time[5]
-
+    
             # Check if hour or minute has changed
             if local_hour != last_hour or local_minute != last_minute:
                 last_hour = local_hour
                 last_minute = local_minute
-
+    
                 # Format the hour and minute text
                 hour_text = '{:02}'.format(local_hour)
                 minute_text = '{:02}'.format(local_minute)
-
+    
                 # Clear the hour and minute areas
                 display.fill_rect(positions['hour'], time_y, hour_width, time_font.height(), st7789.BLACK)
                 display.fill_rect(positions['minute'], time_y, minute_width, time_font.height(), st7789.BLACK)
-
+    
                 # Draw the hour and minute digits
                 display_time_digits(display, hour_text, minute_text, positions, time_y, time_font)
-
+    
                 # Read and display temperature
                 temperature = read_internal_temperature()
                 temp_text = '{:0.1f}C'.format(temperature)
                 temp_width = get_text_width(temp_text, temp_font)
                 temp_x = (display.width - temp_width) // 2
                 temp_y = time_y + time_font.height() + 10  # 10 pixels below time
-
+    
                 # Clear and draw temperature
                 display.fill_rect(temp_x, temp_y, temp_width, temp_font.height(), st7789.BLACK)
                 display_text(display, temp_text, temp_x, temp_y, temp_font, st7789.WHITE)
                 gc.collect()
-
+    
             # Toggle the colon every second
             dot_state = not dot_state
             update_colon(display, positions, time_y, time_font, dot_state)
-
+    
             # Resynchronize time if needed
             if time.time() - last_sync_time >= sync_interval_seconds:
                 wlan.active(True)
-                wlan.connect(WIFI_SSID, WIFI_PASSWORD)
-                start_time = time.time()
-                while not wlan.isconnected():
-                    if time.time() - start_time > 10:
-                        print("Failed to reconnect to Wi-Fi.")
-                        break
-                    time.sleep(0.5)
-                if wlan.isconnected():
-                    sync_time()
+                wlan = connect_wifi(display, WIFI_SSID, WIFI_PASSWORD)
+                if wlan:
+                    sync_time(display)
                     last_sync_time = time.time()
-                wlan.active(False)
-
+                    wlan.active(False)
+                    # After reconnection, redraw the time and temperature
+                    last_hour = -1  # Force update
+                else:
+                    print("Unable to reconnect to Wi-Fi.")
+                    # Continue running without resync
+                    wlan.active(False)
+    
             # Sleep for 1 second
             time.sleep(1)
             gc.collect()  # Perform garbage collection during sleep
-
+    
     except KeyboardInterrupt:
         # Handle script interruption
         print('Script interrupted by user.')
