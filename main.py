@@ -34,7 +34,7 @@ def init_display():
         cs=Pin(9, Pin.OUT),
         dc=Pin(8, Pin.OUT),
         backlight=Pin(13, Pin.OUT),
-        rotation=1  # Set to landscape
+        rotation=3  # Set to landscape
     )
 
 def load_env_vars(filename='.env'):
@@ -309,9 +309,35 @@ def read_internal_temperature():
     """
     Read the internal temperature sensor and return the temperature in Celsius.
     """
-    reading = sensor_temp.read_u16() * 3.3 / (65535)  # Read 16-bit ADC value
+    reading = sensor_temp.read_u16() * 3.3 / 65535  # Read 16-bit ADC value
     temperature_c = 27 - (reading - 0.706)/0.001721
     return temperature_c
+
+def update_temperature_display(display, temp_font, temp_x, temp_y):
+    """
+    Read the temperature and update the display.
+    Args:
+        display: ST7789 display object
+        temp_font: Font module for temperature
+        temp_x (int): X-coordinate for temperature text
+        temp_y (int): Y-coordinate for temperature text
+    """
+    temperature = read_internal_temperature()
+    temp_text = '{:0.1f}C'.format(temperature)
+    temp_width = get_text_width(temp_text, temp_font)
+
+    # Determine the color based on temperature
+    if temperature < 19:
+        temp_color = st7789.BLUE
+    elif 19 <= temperature <= 25:
+        temp_color = st7789.GREEN
+    else:  # temperature > 25
+        temp_color = st7789.RED
+
+    # Clear and draw temperature
+    display.fill_rect(temp_x, temp_y, temp_width, temp_font.height(), st7789.BLACK)
+    display_text(display, temp_text, temp_x, temp_y, temp_font, temp_color)
+    gc.collect()
 
 # ============================
 # Main Function
@@ -367,7 +393,7 @@ def main():
     total_time_width = hour_width + colon_width + minute_width
 
     # Calculate positions
-    time_x = (display.width - total_time_width) // 2
+    time_x = (display.width - total_time_width) // 2 -15
     time_y = (display.height - time_font.height()) // 2 - 20  # Centered vertically
 
     # Positions of hour, colon, minute
@@ -376,6 +402,19 @@ def main():
         'colon': time_x + hour_width,
         'minute': time_x + hour_width + colon_width
     }
+
+    # Calculate positions for temperature display
+    # Adjust these values based on your display layout
+    temp_text_initial = '0.0C'
+    temp_width_initial = get_text_width(temp_text_initial, temp_font)
+    temp_x = (display.width - temp_width_initial) // 2 - 5
+    temp_y = time_y + time_font.height() + 40  # Adjust as needed
+
+    # Initial temperature display
+    update_temperature_display(display, temp_font, temp_x, temp_y)
+
+    # Initialize temperature update timer
+    last_temp_update = time.time()
 
     try:
         while True:
@@ -436,28 +475,20 @@ def main():
                 display_time_digits(display, hour_text, minute_text, positions, time_y, time_font)
 
                 # Read and display temperature
-                temperature = read_internal_temperature()
-                temp_text = '{:0.1f}C'.format(temperature)
-                temp_width = get_text_width(temp_text, temp_font)
-                temp_x = (display.width - temp_width) // 2 + 15
-                temp_y = time_y + time_font.height() + 40  # Adjust as needed
-
-                # Determine the color based on temperature
-                if temperature < 19:
-                    temp_color = st7789.BLUE
-                elif 19 <= temperature <= 25:
-                    temp_color = st7789.GREEN
-                else:  # temperature > 25
-                    temp_color = st7789.RED
-
-                # Clear and draw temperature
-                display.fill_rect(temp_x, temp_y, temp_width, temp_font.height(), st7789.BLACK)
-                display_text(display, temp_text, temp_x, temp_y, temp_font, temp_color)
-                gc.collect()
+                update_temperature_display(display, temp_font, temp_x, temp_y)
 
             # Toggle the colon every second
             dot_state = not dot_state
             update_colon(display, positions, time_y, time_font, dot_state)
+
+            # -----------------------------
+            # Temperature Update Every 5 Seconds
+            # -----------------------------
+            current_time_sec = time.time()
+            if current_time_sec - last_temp_update >= 5:
+                update_temperature_display(display, temp_font, temp_x, temp_y)
+                last_temp_update = current_time_sec
+            # -----------------------------
 
             # Resynchronize time if needed
             if time.time() - last_sync_time >= sync_interval_seconds:
@@ -493,5 +524,4 @@ if __name__ == '__main__':
         main()
     except Exception as e:
         print(f"An error occurred: {e}")
-
 
