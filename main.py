@@ -2,6 +2,7 @@ import network
 import ntptime
 import time
 import gc
+import dht 
 from machine import Pin, SPI, RTC, ADC
 import st7789py as st7789
 import dseg7b32 as your_font_small  # Smaller font module (32 pixels high)
@@ -12,6 +13,8 @@ import mini16 as your_font_mini     # Mini font module (16 pixels high)
 # ============================
 # Configuration Parameters
 # ============================
+
+dSensor = dht.DHT22(Pin(2))
 
 # Time synchronization interval in hours
 TIME_SYNC_INTERVAL_HOURS = 6  # Change '6' to your desired interval
@@ -306,11 +309,16 @@ def update_colon(display, x_positions, y, font, show_colon):
 sensor_temp = ADC(4)
 
 def read_internal_temperature():
+    
+    dSensor.measure()
+    temperature_c = dSensor.temperature()
+    
+    
     """
     Read the internal temperature sensor and return the temperature in Celsius.
     """
-    reading = sensor_temp.read_u16() * 3.3 / 65535  # Read 16-bit ADC value
-    temperature_c = 27 - (reading - 0.706)/0.001721
+    #reading = sensor_temp.read_u16() * 3.3 / 65535  # Read 16-bit ADC value
+    #temperature_c = 27 - (reading - 0.706)/0.001721
     return temperature_c
 
 def update_temperature_display(display, temp_font, temp_x, temp_y):
@@ -322,16 +330,18 @@ def update_temperature_display(display, temp_font, temp_x, temp_y):
         temp_x (int): X-coordinate for temperature text
         temp_y (int): Y-coordinate for temperature text
     """
-    temperature = read_internal_temperature()
-    temp_text = '{:0.1f}C'.format(temperature)
+    dSensor.measure()
+    temperature = dSensor.temperature()
+    hum = dSensor.humidity()
+    temp_text = '{:0.1f}C'.format(temperature) + "  " + '{:0.1f}h'.format(hum)
     temp_width = get_text_width(temp_text, temp_font)
 
     # Determine the color based on temperature
     if temperature < 19:
-        temp_color = st7789.BLUE
-    elif 19 <= temperature <= 25:
+        temp_color = st7789.CYAN
+    elif 19 <= temperature <= 28:
         temp_color = st7789.GREEN
-    else:  # temperature > 25
+    else:  # temperature > 28
         temp_color = st7789.RED
 
     # Clear and draw temperature
@@ -407,7 +417,7 @@ def main():
     # Adjust these values based on your display layout
     temp_text_initial = '0.0C'
     temp_width_initial = get_text_width(temp_text_initial, temp_font)
-    temp_x = (display.width - temp_width_initial) // 2 - 5
+    temp_x = (display.width - temp_width_initial) - 192
     temp_y = time_y + time_font.height() + 40  # Adjust as needed
 
     # Initial temperature display
